@@ -129,7 +129,8 @@ func TestSignIn(t *testing.T) {
 		mockAuthCodeCipher     *aead.MockCipher
 		refreshResponse        providerRefreshResponse
 		providerValidToken     bool
-		validEmail             bool
+		validatorResult        bool
+		validatorErr           error
 		expectedSignInPage     bool
 		expectedDestinationURL string
 		expectedCode           int
@@ -293,7 +294,7 @@ func TestSignIn(t *testing.T) {
 			refreshResponse: providerRefreshResponse{
 				OK: true,
 			},
-			validEmail:            true,
+			validatorResult:       true,
 			expectedCode:          http.StatusForbidden,
 			expectedErrorResponse: &errResponse{"no state parameter supplied"},
 		},
@@ -314,7 +315,7 @@ func TestSignIn(t *testing.T) {
 			refreshResponse: providerRefreshResponse{
 				OK: true,
 			},
-			validEmail:            true,
+			validatorResult:       true,
 			expectedCode:          http.StatusForbidden,
 			expectedErrorResponse: &errResponse{"no redirect_uri parameter supplied"},
 		},
@@ -336,7 +337,7 @@ func TestSignIn(t *testing.T) {
 			refreshResponse: providerRefreshResponse{
 				OK: true,
 			},
-			validEmail:            true,
+			validatorResult:       true,
 			expectedCode:          http.StatusBadRequest,
 			expectedErrorResponse: &errResponse{"malformed redirect_uri parameter passed"},
 		},
@@ -361,7 +362,7 @@ func TestSignIn(t *testing.T) {
 			mockAuthCodeCipher: &aead.MockCipher{
 				MarshalError: fmt.Errorf("error marshal"),
 			},
-			validEmail:            true,
+			validatorResult:       true,
 			expectedCode:          http.StatusInternalServerError,
 			expectedErrorResponse: &errResponse{"error marshal"},
 		},
@@ -386,8 +387,8 @@ func TestSignIn(t *testing.T) {
 			mockAuthCodeCipher: &aead.MockCipher{
 				MarshalString: "abcdefg",
 			},
-			validEmail:   true,
-			expectedCode: http.StatusFound,
+			validatorResult: true,
+			expectedCode:    http.StatusFound,
 		},
 		{
 			name: "valid session state, successful save",
@@ -404,7 +405,7 @@ func TestSignIn(t *testing.T) {
 				"state":        "state",
 				"redirect_uri": "http://foo.example.com",
 			},
-			validEmail:         true,
+			validatorResult:    true,
 			providerValidToken: true,
 			mockAuthCodeCipher: &aead.MockCipher{
 				MarshalString: "abcdefg",
@@ -418,7 +419,7 @@ func TestSignIn(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			config := testConfiguration(t)
 			auth, err := NewAuthenticator(config,
-				SetValidators([]validators.Validator{validators.NewMockValidator(tc.validEmail)}),
+				SetValidators([]validators.Validator{validators.NewMockValidator(tc.validatorResult, tc.validatorErr)}),
 				setMockSessionStore(tc.mockSessionStore),
 				setMockTempl(),
 				setMockRedirectURL(),
@@ -565,7 +566,7 @@ func TestSignOutPage(t *testing.T) {
 			provider.RevokeError = tc.RevokeError
 
 			p, _ := NewAuthenticator(config,
-				SetValidators([]validators.Validator{validators.NewMockValidator(true)}),
+				SetValidators([]validators.Validator{validators.NewMockValidator(true, nil)}),
 				setMockSessionStore(tc.mockSessionStore),
 				setMockTempl(),
 				setTestProvider(provider),
@@ -942,7 +943,7 @@ func TestGetProfile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			config := testConfiguration(t)
 			p, _ := NewAuthenticator(config,
-				SetValidators([]validators.Validator{validators.NewMockValidator(true)}),
+				SetValidators([]validators.Validator{validators.NewMockValidator(true, nil)}),
 			)
 			u, _ := url.Parse("http://example.com")
 			testProvider := providers.NewTestProvider(u)
@@ -1044,7 +1045,7 @@ func TestRedeemCode(t *testing.T) {
 			config := testConfiguration(t)
 
 			proxy, _ := NewAuthenticator(config,
-				SetValidators([]validators.Validator{validators.NewMockValidator(true)}),
+				SetValidators([]validators.Validator{validators.NewMockValidator(true, nil)}),
 			)
 
 			testURL, err := url.Parse("example.com")
@@ -1214,7 +1215,8 @@ func TestOAuthCallback(t *testing.T) {
 		paramsMap          map[string]string
 		expectedError      error
 		testRedeemResponse testRedeemResponse
-		validEmail         bool
+		validatorResult    bool
+		validatorErr       error
 		csrfResp           *sessions.MockCSRFStore
 		sessionStore       *sessions.MockSessionStore
 		expectedRedirect   string
@@ -1374,8 +1376,8 @@ func TestOAuthCallback(t *testing.T) {
 					Value: "state",
 				},
 			},
-			validEmail:    true,
-			expectedError: HTTPError{Code: http.StatusForbidden, Message: "Invalid Redirect URI"},
+			validatorResult: true,
+			expectedError:   HTTPError{Code: http.StatusForbidden, Message: "Invalid Redirect URI"},
 		},
 		{
 			name: "valid email, valid redirect, save error",
@@ -1400,8 +1402,8 @@ func TestOAuthCallback(t *testing.T) {
 			sessionStore: &sessions.MockSessionStore{
 				SaveError: fmt.Errorf("saveError"),
 			},
-			validEmail:    true,
-			expectedError: HTTPError{Code: http.StatusInternalServerError, Message: "Internal Error"},
+			validatorResult: true,
+			expectedError:   HTTPError{Code: http.StatusInternalServerError, Message: "Internal Error"},
 		},
 		{
 			name: "valid email, valid redirect, valid save",
@@ -1424,7 +1426,7 @@ func TestOAuthCallback(t *testing.T) {
 				},
 			},
 			sessionStore:     &sessions.MockSessionStore{},
-			validEmail:       true,
+			validatorResult:  true,
 			expectedRedirect: "http://www.example.com/something",
 		},
 	}
@@ -1433,7 +1435,7 @@ func TestOAuthCallback(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			config := testConfiguration(t)
 			proxy, _ := NewAuthenticator(config,
-				SetValidators([]validators.Validator{validators.NewMockValidator(tc.validEmail)}),
+				SetValidators([]validators.Validator{validators.NewMockValidator(tc.validatorResult, tc.validatorErr)}),
 				setMockCSRFStore(tc.csrfResp),
 				setMockSessionStore(tc.sessionStore),
 			)
@@ -1554,7 +1556,7 @@ func TestOAuthStart(t *testing.T) {
 			provider := providers.NewTestProvider(nil)
 			proxy, _ := NewAuthenticator(config,
 				setTestProvider(provider),
-				SetValidators([]validators.Validator{validators.NewMockValidator(true)}),
+				SetValidators([]validators.Validator{validators.NewMockValidator(true, nil)}),
 				setMockRedirectURL(),
 				setMockCSRFStore(&sessions.MockCSRFStore{}),
 			)
