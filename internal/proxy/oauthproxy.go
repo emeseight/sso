@@ -687,6 +687,7 @@ func (p *OAuthProxy) Authenticate(rw http.ResponseWriter, req *http.Request) (er
 			logger.WithUser(session.Email).Error(err, "refreshing session failed")
 			return err
 		}
+
 		if !ok {
 			// User is not authorized after refresh
 			// clear the cookie and reject the request
